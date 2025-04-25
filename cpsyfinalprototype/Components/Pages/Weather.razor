@@ -1,0 +1,193 @@
+﻿@page "/rentals"
+@using MySqlConnector
+@using static cpsyfinalprototype.Classes.DateUtils
+<h1>Rental Equipment</h1>
+
+<p>This component demonstrates showing data.</p>
+
+<div class="form-group">
+    <label for="name">Name:</label>
+    <input type="text" id="name" class="form-control" @bind="rentalEquipment.Name" />
+</div>
+<div class="form-group">
+    <label for="dailyRentalCost">Daily Rental Cost:</label>
+    <input type="text" id="dailyRentalCost" class="form-control" @bind="rentalEquipment.DailyRentalCost" />
+</div>
+<div class="form-group">
+    <label for="rentalDate">Rental Date:</label>
+    <input type="date" id="rentalDate" class="form-control" @bind="rentalEquipment.RentalDate" />
+</div>
+<div class="form-group">
+    <label for="returnDate">Return Date:</label>
+    <input type="date" id="returnDate" class="form-control" @bind="rentalEquipment.ReturnDate" />
+</div>
+<div class="form-group">
+    <label for="equipmentId">Equipment ID:</label>
+    <input type="text" id="equipmentId" class="form-control" @bind="rentalEquipment.EquipmentId" />
+</div>
+<div class="form-group">
+    <label for="categoryId">Category ID:</label>
+    <input type="text" id="categoryId" class="form-control" @bind="rentalEquipment.CategoryId" />
+</div>
+<div class="form-group">
+    <label for="description">Description:</label>
+    <input type="text" id="description" class="form-control" @bind="rentalEquipment.Description" />
+</div>
+<div class="form-group">
+    <label for="customerId">Customer ID:</label>
+    <input type="text" id="customerId" class="form-control" @bind="rentalEquipment.CustomerId" />
+</div>
+
+<button class="btn btn-primary mt-3" @onclick="AddRentalEquipment">Add Rental Equipment</button>
+<button class="btn btn-secondary mt-3" @onclick="LoadRentalEquipment">Load Rental Equipment</button>
+<button class="btn btn-danger mt-3" @onclick="RemoveEquipment">Remove Equipment</button>
+
+<table class="table mt-3">
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>Equipment ID</th>
+            <th>Category ID</th>
+            <th>Description</th>
+            <th>Customer Name</th>
+			<th>Rental Date</th>
+			<th>Return Date</th>
+            <th>Total Cost</th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var rental in rentals)
+        {
+            <tr>
+                <td>@rental.Name</td>
+                <td>@rental.EquipmentId</td>
+                <td>@rental.CategoryId</td>
+                <td>@rental.Description</td>
+                <td>@rental.CustomerName</td>
+                <td>@rental.RentalDate</td>
+				<td>@rental.ReturnDate</td>
+                <td>@((rental.ReturnDate.ToDateTime(TimeOnly.MinValue) - rental.RentalDate.ToDateTime(TimeOnly.MinValue)).Days * rental.DailyRentalCost)</td>
+            </tr>
+        }
+    </tbody>
+</table>
+
+
+@code {
+    private RentalEquipment rentalEquipment = new RentalEquipment();
+    public List<RentalEquipment> rentals = new List<RentalEquipment>();
+    private string connectionString = "server=localhost;user=root;database=cpsyfinal;password=12345";
+
+    public class RentalEquipment
+    {
+        public int EquipmentId { get; set; }
+        public int CategoryId { get; set; }
+        public string Name { get; set; }
+        public string Description { get; set; }
+        public double DailyRentalCost { get; set; }
+        public DateOnly RentalDate { get; set; } = DateOnly.FromDateTime(DateTime.Today);
+        public DateOnly ReturnDate { get; set; } = DateOnly.FromDateTime(DateTime.Today);
+        public int CustomerId { get; set; }
+        public int RentalId { get; set; }
+        public string CustomerName { get; set; }
+    }
+
+    public void AddRentalEquipment()
+    {
+        using var connection = new MySqlConnection(connectionString);
+        connection.Open();
+
+        var commandId = connection.CreateCommand();
+        commandId.CommandText = "SELECT MAX(rental_id) FROM rental_info";
+        var maxRentalId = (int)(commandId.ExecuteScalar() ?? 0);
+        rentalEquipment.RentalId = maxRentalId + 1;
+
+        var command = connection.CreateCommand();
+        command.CommandText = @"
+            INSERT INTO rental_equipment (equipment_id, category_id, name, description, daily_rate)
+            VALUES (@EquipmentId, @CategoryId, @Name, @Description, @DailyRentalCost)";
+        command.Parameters.AddWithValue("@EquipmentId", rentalEquipment.EquipmentId);
+        command.Parameters.AddWithValue("@CategoryId", rentalEquipment.CategoryId);
+        command.Parameters.AddWithValue("@Name", rentalEquipment.Name);
+        command.Parameters.AddWithValue("@Description", rentalEquipment.Description);
+        command.Parameters.AddWithValue("@DailyRentalCost", rentalEquipment.DailyRentalCost);
+        command.ExecuteNonQuery();
+
+        var command2 = connection.CreateCommand();
+        command2.CommandText = @"
+            INSERT INTO rental_info (rental_id, date, customer_id, equipment_id, rental_date, return_date, cost)
+            VALUES (@RentalId, @Date, @CustomerId, @EquipmentId, @RentalDate, @ReturnDate, @Cost)";
+        command2.Parameters.AddWithValue("@RentalId", rentalEquipment.RentalId);
+        command2.Parameters.AddWithValue("@Date", DateTime.Now);
+        command2.Parameters.AddWithValue("@CustomerId", rentalEquipment.CustomerId);
+        command2.Parameters.AddWithValue("@EquipmentId", rentalEquipment.EquipmentId);
+        command2.Parameters.AddWithValue("@RentalDate", rentalEquipment.RentalDate);
+        command2.Parameters.AddWithValue("@ReturnDate", rentalEquipment.ReturnDate);
+        command2.Parameters.AddWithValue("@Cost", rentalEquipment.DailyRentalCost * (rentalEquipment.ReturnDate.ToDateTime(TimeOnly.MinValue) - rentalEquipment.RentalDate.ToDateTime(TimeOnly.MinValue)).Days);
+        command2.ExecuteNonQuery();
+
+        rentalEquipment.CustomerName = GetCustomerNameById(rentalEquipment.CustomerId, connection);
+        rentals.Add(rentalEquipment);
+    }
+
+    private string GetCustomerNameById(int customerId, MySqlConnection connection)
+    {
+        var command = connection.CreateCommand();
+        command.CommandText = "SELECT CONCAT(first_name, ' ', last_name) FROM customer_info WHERE customer_id = @CustomerId";
+        command.Parameters.AddWithValue("@CustomerId", customerId);
+        return command.ExecuteScalar()?.ToString() ?? "Unknown";
+    }
+
+    public void RemoveEquipment()
+    {
+        using var connection = new MySqlConnection(connectionString);
+        connection.Open();
+        var command = connection.CreateCommand();
+        command.CommandText = "DELETE FROM rental_equipment WHERE equipment_id = @EquipmentId";
+        command.Parameters.AddWithValue("@EquipmentId", rentalEquipment.EquipmentId);
+        command.ExecuteNonQuery();
+    }
+
+    public void LoadRentalEquipment()
+    {
+        rentals.Clear();
+        using var connection = new MySqlConnection(connectionString);
+        connection.Open();
+
+        var command = connection.CreateCommand();
+        command.CommandText = @"
+    SELECT re.equipment_id, re.category_id, re.name, re.description, CONCAT(ci.first_name, ' ', ci.last_name) AS customer_name, ri.rental_date, ri.return_date, ri.cost
+    FROM rental_equipment re
+    JOIN rental_info ri ON re.equipment_id = ri.equipment_id
+    JOIN customer_info ci ON ri.customer_id = ci.customer_id";
+        using var reader = command.ExecuteReader();
+        while (reader.Read())
+        {
+            var rentalDateString = reader.GetString(5);
+            var returnDateString = reader.GetString(6);
+
+            if (TryParseDate(rentalDateString, out DateOnly rentalDate) &&
+                TryParseDate(returnDateString, out DateOnly returnDate))
+            {
+                rentals.Add(new RentalEquipment
+                    {
+                        EquipmentId = reader.GetInt32(0),
+                        CategoryId = reader.GetInt32(1),
+                        Name = reader.GetString(2),
+                        Description = reader.GetString(3),
+                        CustomerName = reader.GetString(4),
+                        RentalDate = rentalDate,
+                        ReturnDate = returnDate,
+                        DailyRentalCost = reader.GetDouble(7) / (returnDate.ToDateTime(TimeOnly.MinValue) - rentalDate.ToDateTime(TimeOnly.MinValue)).Days
+                    });
+            }
+           
+        }
+    }
+
+    private bool TryParseDate(string dateString, out DateOnly date)
+    {
+        return DateOnly.TryParse(dateString, out date);
+    }
+}
+}

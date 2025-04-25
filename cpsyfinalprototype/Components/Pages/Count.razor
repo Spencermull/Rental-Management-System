@@ -1,0 +1,145 @@
+﻿@page "/customer"  
+@using MySqlConnector  
+
+<h1>Customer Information</h1>  
+
+<div class="form-group">  
+   <label for="firstName">First Name:</label>  
+   <input type="text" id="firstName" class="form-control" @bind="customer.FirstName" />  
+</div>  
+<div class="form-group">  
+   <label for="lastName">Last Name:</label>  
+   <input type="text" id="lastName" class="form-control" @bind="customer.LastName" />  
+</div>  
+<div class="form-group">  
+   <label for="contactPhone">Contact Phone:</label>  
+   <input type="text" id="contactPhone" class="form-control" @bind="customer.ContactPhone" />  
+</div>  
+<div class="form-group">  
+   <label for="email">Email:</label>  
+   <input type="email" id="email" class="form-control" @bind="customer.Email" />  
+</div>  
+
+<button class="btn btn-primary mt-3" @onclick="AddCustomer">Add Customer</button>  
+
+<div class="mt-4">  
+   <label for="customerList">Select Customer:</label>  
+   <input type="text" id="customerList" class="form-control" @onclick="ToggleCustomerList" readonly />  
+   @if (showCustomerList)  
+   {  
+       <ul class="list-group mt-2">  
+           @foreach (var cust in customers)  
+           {  
+               <li class="list-group-item list-group-item-action" @onclick="() => SelectCustomer(cust)">  
+                   @cust.FirstName @cust.LastName  
+               </li>  
+           }  
+       </ul>  
+   }  
+</div>
+
+@code {  
+   private class Customer  
+   {  
+       public int CustomerId { get; set; }  
+       public string FirstName { get; set; }  
+       public string LastName { get; set; }  
+       public string ContactPhone { get; set; }  
+       public string Email { get; set; }  
+   }  
+
+   private Customer customer = new Customer();  
+   private List<Customer> customers = new List<Customer>();  
+   private bool showCustomerList = false;  
+   private Customer selectedCustomer;  
+
+   private string connectionString = "server=localhost;user=root;database=cpsyfinal;password=12345";  
+   private List<Customer> originalCustomers = new List<Customer>();
+
+   protected override void OnInitialized()  
+   {  
+       LoadCustomers();  
+       originalCustomers = customers.Select(c => new Customer
+       {
+           CustomerId = c.CustomerId,
+           FirstName = c.FirstName,
+           LastName = c.LastName,
+           ContactPhone = c.ContactPhone,
+           Email = c.Email
+       }).ToList();
+   }  
+
+   private void LoadCustomers()  
+   {  
+       using var connection = new MySqlConnection(connectionString);  
+       connection.Open();  
+
+       var command = connection.CreateCommand();  
+       command.CommandText = "SELECT customer_id, first_name, last_name, contact_phone, email FROM customer_info";  
+
+       using var reader = command.ExecuteReader();  
+       while (reader.Read())  
+       {  
+           customers.Add(new Customer  
+           {  
+               CustomerId = reader.GetInt32(0),  
+               FirstName = reader.GetString(1),  
+               LastName = reader.GetString(2),  
+               ContactPhone = reader.GetString(3),  
+               Email = reader.GetString(4)  
+           });  
+       }  
+   }  
+
+   private void AddCustomer()  
+   {  
+       using var connection = new MySqlConnection(connectionString);  
+       connection.Open();  
+
+       var command = connection.CreateCommand();  
+       command.CommandText = "SELECT MAX(customer_id) FROM customer_info";  
+       var maxCustomerId = (int)command.ExecuteScalar();  
+       customer.CustomerId = maxCustomerId + 1;  
+
+       command.CommandText = @"  
+           INSERT INTO customer_info (customer_id, last_name, first_name, contact_phone, email)  
+           VALUES (@CustomerId, @LastName, @FirstName, @ContactPhone, @Email)";  
+       command.Parameters.AddWithValue("@CustomerId", customer.CustomerId);  
+       command.Parameters.AddWithValue("@FirstName", customer.FirstName);  
+       command.Parameters.AddWithValue("@LastName", customer.LastName);  
+       command.Parameters.AddWithValue("@ContactPhone", customer.ContactPhone);  
+       command.Parameters.AddWithValue("@Email", customer.Email);
+
+       command.ExecuteNonQuery();  
+
+       customers.Add(new Customer  
+       {  
+           CustomerId = customer.CustomerId,  
+           FirstName = customer.FirstName,  
+           LastName = customer.LastName,  
+           ContactPhone = customer.ContactPhone,  
+           Email = customer.Email  
+       });  
+
+       customer = new Customer();  
+   }  
+
+   private void ToggleCustomerList()  
+   {  
+       showCustomerList = !showCustomerList;  
+   }  
+
+   private void SelectCustomer(Customer cust)  
+   {  
+       selectedCustomer = cust;  
+       customer = new Customer  
+       {  
+           CustomerId = cust.CustomerId,  
+           FirstName = cust.FirstName,  
+           LastName = cust.LastName,  
+           ContactPhone = cust.ContactPhone,  
+           Email = cust.Email  
+       };  
+       showCustomerList = false;  
+   }  
+}
